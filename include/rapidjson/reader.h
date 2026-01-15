@@ -1000,14 +1000,33 @@ private:
         };
 #undef Z16
 //!@endcond
-
+        
+        // 正则表达式标志位: 0 为未初始化, 1 为正则表达式, 2 为非正则表达式
+        int regexFlag = 0;
         for (;;) {
             // Scan and copy string before "\\\"" or < 0x20. This is an optional optimzation.
             if (!(parseFlags & kParseValidateEncodingFlag))
                 ScanCopyUnescapedString(is, os);
 
             Ch c = is.Peek();
-            if (RAPIDJSON_UNLIKELY(c == '\\')) {    // Escape
+            
+            // 检查是否为正则表达式标志位未初始化
+            if (regexFlag == 0) {
+                if (RAPIDJSON_UNLIKELY(c == '/')) {
+                    regexFlag = 1; // 是正则表达式
+                } else {
+                    regexFlag = 2; // 不是正则表达式
+                }
+            }
+            if (RAPIDJSON_UNLIKELY(c == '"')) {    // Closing double quote
+                is.Take();
+                os.Put('\0');   // null-terminate the string
+                return;
+            }else if (regexFlag == 1) {
+                // 正则表达式，直接复制
+                os.Put(c);
+                is.Take();
+            }else if (RAPIDJSON_UNLIKELY(c == '\\')) {    // Escape
                 size_t escapeOffset = is.Tell();    // For invalid escaping, report the initial '\\' as error offset
                 is.Take();
                 Ch e = is.Peek();
@@ -1045,11 +1064,6 @@ private:
                 }
                 else
                     RAPIDJSON_PARSE_ERROR(kParseErrorStringEscapeInvalid, escapeOffset);
-            }
-            else if (RAPIDJSON_UNLIKELY(c == '"')) {    // Closing double quote
-                is.Take();
-                os.Put('\0');   // null-terminate the string
-                return;
             }
             else if (RAPIDJSON_UNLIKELY(static_cast<unsigned>(c) < 0x20)) { // RFC 4627: unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
                 if (c == '\0')
